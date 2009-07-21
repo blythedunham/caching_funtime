@@ -1,0 +1,91 @@
+=CachingFuntime
+Helpers to clear and organize assets (js and css), page cache and fragment cache
+
+Rake tasks don't typically have access to the +url_for+ and other methods on the controllers
+Shove that functionality and add some for cache expiration.
+
+  CachingFuntime::TheKasher.expire_fragment( :controller => 'grapes', :action => 'fun' )
+
+  CachingFuntime::TheKasher.url_for(:controller => 'boo', :action => 'meh')
+
+== Rake Tasks
+rake caching_funtime:page:sweep
+rake caching_funtime:assets:sweep
+rake caching_funtime:fragments:sweep
+
+rake caching_funtime:assets:sweep                            # remove cached assets
+rake caching_funtime:fragments:sweep                         # remove cached fragments (and actions)
+rake caching_funtime:fragments:sweep_by_name                 # sweep specified fragment  rake kashless:cache:fragments:sweep_by_name NAME=_browse
+rake caching_funtime:page:build_page_cache                   # Build all cached pages
+rake caching_funtime:page:build_rendered_assets              # Build the cache files for rendered_assets/javascripts.js
+rake caching_funtime:page:sweep                              # Clear the page cache
+rake caching_funtime:public:sweep                            # Remove all page caches and assets
+
+
+== Customize
+In a file such as lib/cache_config.rb, add on to TheCacher, or
+include +ActsAsCacher+ to a custom class
+
+  class CachingFuntime::TheCacher
+    include MyCustomHelperWhatever
+
+    # define the default_url_options (or must specify :host
+    self.default_url_options = ActionMailer::Base.default_url_options.dup
+
+    # List the directories and files that are page cached
+    self.page_cache_assets   = [ File.join( 'public', 'rendered_assets' ) ].freeze
+
+    # List the stylesheet and javascript generated assets
+    self.assets = {
+      :stylesheets => %w( mainContainer ),
+      :javascripts => %w( goodBundle funBundle show contact )
+    }.freeze
+
+  end
+
+Custom class
+  class MyCustomClass
+    include ActsAsCacherSingleton
+    extend  ExtendedFragmentSupport
+  end
+
+Note for +url_for+ to work, :host is required, or your can specify it
+by setting
+
+  CachingFuntime::TheCacher.default_url_options = { :host => 'giraffe.com' }
+
+== Organize your cache
+Organize the cache by tracking the different types of permutations of cache keys.
+
+  cache_key = CachingFuntime::TheCacher.cache_key_params( :index,  :user => active_user )
+  cache( cache_key ) { }
+
+Later from a Rake task you could call to delete the permutation. Useful since memcache
+does not have a wild card delete
+  CachingFuntime::TheCacher.delete_tracked_fragments
+
+=== Setup Trackers
+In a file, perhaps lib/cache_helpers.rb
+
+#Define Dynamic Parameters and their options
+  CachingFuntime::CacheKeyBuilder.parameter_types = {
+    :fl         => [:a, :b, :c],
+    :cl         => %w(0 1),
+    :pp         => %w(25 50 75 100),
+  }
+
+#Define the transformations from inputs to params
+  CachingFuntime::CacheKeyBuilder.dynamic_input_transforms = {
+    :pp        => lambda { |inputs| :a  },
+    :fl        => lambda { |inputs| inputs[:user].try(:flag_fun) ? 1 : 0  },
+    :cl        => lambda { |inputs| inputs[:user].try(:flag_super) ? 1 : 0 },
+  }
+
+#Define the tracked fragments by names
+  CachingFuntime::CacheKeyBuilder.tracked_fragments = {
+    :_search_bar           => CachingFuntime::CacheKeyBuilder.new(:listings, :_browse,           [:pp, :fl, :cl]),
+    :index                 => CachingFuntime::CacheKeyBuilder.new(:contacts, :index,             [:pp])
+  }
+
+
+Copyright (c) 2009 blythe dunham, released under the MIT license
